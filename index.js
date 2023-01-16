@@ -59,7 +59,6 @@ app.use('*', async (req, res, next) => {
 app.post('/', async (req, res) => {
     var ids = []
     try {
-        console.log(req.headers);
         if (Object.keys(req.body).includes('process') && Object.keys(req.body).includes('data')) {
             if (Array.isArray(req.body.data)) {
                 var items = req.body.data
@@ -108,22 +107,6 @@ app.post('/', async (req, res) => {
     }
 })
 
-async function getTransactionId() {
-    return new Promise((resolve, reject) => {
-        readFile(sequencePath).then(data => {
-            var { TRANSACTION_ID, BY } = JSON.parse(data);
-            var newVal = { "TRANSACTION_ID": TRANSACTION_ID + BY, "BY": BY }
-            writeFile(sequencePath, JSON.stringify(newVal)).then(data => {
-                resolve(newVal.TRANSACTION_ID)
-            }).catch(e => {
-                reject(e)
-            })
-        }).catch(e => {
-            reject(e)
-        })
-    })
-}
-
 async function getAccountName(obj) {
     return new Promise((resolve, reject) => {
         var { branch, account } = obj
@@ -145,7 +128,7 @@ async function prepareTx(obj) {
         try {
             var { branch, account, invoice } = obj;
             if (typeof branch !== 'undefined' && typeof account !== 'undefined') {
-                resolve({ accountName: await getAccountName({ branch, account }).then(r => r), txId: await getTransactionId().then(r => r), invoice: typeof invoice == 'undefined' ? 'getInvoice' : invoice })
+                resolve({ accountName: await getAccountName({ branch, account }).then(r => r), txId: await incr().then(r => r), invoice: typeof invoice == 'undefined' ? 'getInvoice' : invoice })
             } else {
                 reject('branch or account undefined!')
             }
@@ -181,6 +164,22 @@ async function rollback(obj) {
             console.log(e);
             reject({ success: false, data: {}, message: e })
         })
+    })
+}
+
+async function incr() {
+    return new Promise((resolve, reject) => {
+        try {
+            const { Sequence } = require('./models')
+            Sequence.findOne().then(r => {
+                var { TRANSACTION_ID, BY } = r
+                Sequence.findOneAndUpdate({}, { $set: { TRANSACTION_ID: TRANSACTION_ID + BY } }, { new: true }).then(newObj => {
+                    resolve(newObj.TRANSACTION_ID)
+                })
+            })
+        } catch (e) {
+            reject(e)
+        }
     })
 }
 
